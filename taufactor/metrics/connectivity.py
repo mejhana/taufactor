@@ -92,11 +92,10 @@ def _merge_periodic_labels(labeled_mask, num_labels, pairs):
 def label_periodic(
     field,
     phase_labels,
-    neighbour_structure,
     periodic,
+    connectivity=1,
     debug=False,
     phase_mask=None,
-    connectivity=1,
 ):
     """Label connected components with periodic boundary conditions.
 
@@ -105,14 +104,12 @@ def label_periodic(
     Args:
         field (numpy.ndarray): Input array (2D or 3D).
         phase_labels (int | Sequence[int]): Label value(s) forming the connected phase.
-        neighbour_structure (numpy.ndarray): Structuring element as from
-            ``scipy.ndimage.generate_binary_structure``.
         periodic (Sequence[bool]): Periodicity flags per axis (e.g. ``(True, False, True)``).
+        connectivity (int, optional): TauFactor rank ``1``, ``2``, or ``3``.
+            Defaults to ``1``.
         debug (bool, optional): Print simple diagnostics. Defaults to ``False``.
         phase_mask (numpy.ndarray, optional): Precomputed mask for ``phase_labels``.
             Defaults to ``None``.
-        connectivity (int, optional): TauFactor rank ``1``, ``2``, or ``3``. Must match
-            ``neighbour_structure``. Defaults to ``1``.
 
     Returns:
         tuple[numpy.ndarray, int]: Tuple ``(labels, num_labels)`` where ``labels`` is the
@@ -128,6 +125,7 @@ def label_periodic(
         return_N=True,
         binary_image=True,
     )
+    neighbour_structure = generate_binary_structure(phase_mask.ndim, connectivity)
     pairs = _periodic_label_pairs(labeled_mask, neighbour_structure, periodic)
     if pairs.size:
         num_labels = _merge_periodic_labels(labeled_mask, num_labels, pairs)
@@ -258,20 +256,18 @@ def extract_connected_network(
 
     results = {}
     transverse_axes = tuple(index for index in range(array.ndim) if index != axis_index)
+    volume_fraction_all = phase_mask.mean(axis=transverse_axes)
 
     # Compute the largest interconnected features depending on given connectivity
     for conn in connectivities_to_loop_over:
-        neighbour_structure = generate_binary_structure(3, conn)
-        # Label connected components in the mask with given neighbour structure
         if any(periodic):
             labeled_mask, num_labels = label_periodic(
                 array,
                 phase_labels,
-                neighbour_structure,
                 periodic,
+                connectivity=conn,
                 debug=debug,
                 phase_mask=phase_mask,
-                connectivity=conn,
             )
         else:
             labeled_mask, num_labels = cc3d.connected_components(
@@ -291,7 +287,6 @@ def extract_connected_network(
         if through_labels:
             is_spanning[list(through_labels)] = True  # through_labels: set of label ids
         spanning_network = is_spanning[labeled_mask]  # labeled_mask, spanning_network: array.shape
-        volume_fraction_all = phase_mask.mean(axis=transverse_axes)
         volume_fraction_conn = spanning_network.mean(axis=transverse_axes)
 
         results[conn] = {
